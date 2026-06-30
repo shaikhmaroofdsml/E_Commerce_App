@@ -1,0 +1,46 @@
+# notification-service configuration
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/ecommerce_notifications?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ecommerce
+    password: ecommerce123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.ecommerce.*"
+  # Gmail SMTP — set MAIL_USERNAME and MAIL_PASSWORD environment variables
+  # Or leave stub: email logs to console if credentials missing
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:stub@example.com}
+    password: ${MAIL_PASSWORD:stub-password}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+notification:
+  email:
+    stub-mode: ${MAIL_STUB_MODE:true}   # Set to false when real credentials configured
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

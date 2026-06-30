@@ -1,0 +1,200 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  config:
+    import: "optional:configserver:http://config-admin:config-secret@localhost:8888"
+
+  # JWT public key for RS256 validation
+  security:
+    jwt:
+      public-key-path: classpath:keys/public.pem
+
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      routes:
+        # ─── Swagger UI Passthrough (no JWT) ─────────────────────────────────
+        - id: swagger-customer
+          uri: lb://customer-service
+          predicates:
+            - Path=/customer-service/v3/api-docs/**
+          filters:
+            - RewritePath=/customer-service(?<segment>/?.*), $\{segment}
+
+        - id: swagger-product
+          uri: lb://product-service
+          predicates:
+            - Path=/product-service/v3/api-docs/**
+          filters:
+            - RewritePath=/product-service(?<segment>/?.*), $\{segment}
+
+        - id: swagger-order
+          uri: lb://order-service
+          predicates:
+            - Path=/order-service/v3/api-docs/**
+          filters:
+            - RewritePath=/order-service(?<segment>/?.*), $\{segment}
+
+        - id: swagger-payment
+          uri: lb://payment-service
+          predicates:
+            - Path=/payment-service/v3/api-docs/**
+          filters:
+            - RewritePath=/payment-service(?<segment>/?.*), $\{segment}
+
+        - id: swagger-admin
+          uri: lb://admin-service
+          predicates:
+            - Path=/admin-service/v3/api-docs/**
+          filters:
+            - RewritePath=/admin-service(?<segment>/?.*), $\{segment}
+
+        # ─── Customer Service ────────────────────────────────────────────────
+        - id: customer-public
+          uri: lb://customer-service
+          predicates:
+            - Path=/api/customers/register, /api/customers/login, /api/customers/oauth2/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: customerCB
+                fallbackUri: forward:/fallback
+
+        - id: customer-protected
+          uri: lb://customer-service
+          predicates:
+            - Path=/api/customers/**
+          filters:
+            - JwtAuthentication
+            - name: CircuitBreaker
+              args:
+                name: customerCB
+                fallbackUri: forward:/fallback
+
+        # ─── Product Service ──────────────────────────────────────────────────
+        - id: product-public
+          uri: lb://product-service
+          predicates:
+            - Path=/api/products/**, /api/categories/**
+            - Method=GET
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: productCB
+                fallbackUri: forward:/fallback
+
+        - id: product-protected
+          uri: lb://product-service
+          predicates:
+            - Path=/api/products/**, /api/categories/**
+          filters:
+            - JwtAuthentication
+            - name: CircuitBreaker
+              args:
+                name: productCB
+                fallbackUri: forward:/fallback
+
+        # ─── Order Service ────────────────────────────────────────────────────
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/api/orders/**
+          filters:
+            - JwtAuthentication
+            - name: CircuitBreaker
+              args:
+                name: orderCB
+                fallbackUri: forward:/fallback
+
+        # ─── Payment Service ──────────────────────────────────────────────────
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/payments/**
+          filters:
+            - JwtAuthentication
+            - name: CircuitBreaker
+              args:
+                name: paymentCB
+                fallbackUri: forward:/fallback
+
+        # ─── Notification Service ─────────────────────────────────────────────
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - JwtAuthentication
+
+        # ─── Admin Service ────────────────────────────────────────────────────
+        - id: admin-service
+          uri: lb://admin-service
+          predicates:
+            - Path=/api/admin/**
+          filters:
+            - JwtAuthentication
+            - name: CircuitBreaker
+              args:
+                name: adminCB
+                fallbackUri: forward:/fallback
+
+# Eureka registration
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: http://eureka:eureka-secret@localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+
+# Resilience4j circuit breaker defaults
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 5
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,routes,filters
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    com.ecommerce.gateway: DEBUG
+
+# ─── Springdoc: Aggregate all service swagger UIs via gateway ────────────────
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    urls:
+      - name: Customer Service
+        url: /customer-service/v3/api-docs
+      - name: Product Service
+        url: /product-service/v3/api-docs
+      - name: Order Service
+        url: /order-service/v3/api-docs
+      - name: Payment Service
+        url: /payment-service/v3/api-docs
+      - name: Admin Service
+        url: /admin-service/v3/api-docs
+  api-docs:
+    enabled: true

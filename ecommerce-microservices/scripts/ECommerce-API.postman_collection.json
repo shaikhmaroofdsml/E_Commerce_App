@@ -1,0 +1,449 @@
+{
+  "info": {
+    "name": "Enterprise E-Commerce Microservices API",
+    "description": "Complete API test collection for the Enterprise E-Commerce Microservices Platform.\nAll requests go through the API Gateway on http://localhost:8080.\n\nSETUP:\n1. Run the 'Register' and 'Login' requests first.\n2. The Login request auto-saves the JWT to the {{token}} variable.\n3. All protected endpoints automatically use Bearer {{token}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "token",   "value": "",                      "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+
+    {
+      "name": "01 — Auth (Customer Service)",
+      "item": [
+        {
+          "name": "Register Customer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/customers/register", "host": ["{{baseUrl}}"], "path": ["api","customers","register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"password123\",\n  \"phone\": \"+919876543210\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login — Auto-save Token",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "var res = pm.response.json();",
+                "if (res.token) {",
+                "    pm.collectionVariables.set('token', res.token);",
+                "    console.log('Token saved:', res.token.substring(0,40) + '...');",
+                "}"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/customers/login", "host": ["{{baseUrl}}"], "path": ["api","customers","login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"password123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login as Admin — Auto-save Token",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "var res = pm.response.json();",
+                "if (res.token) {",
+                "    pm.collectionVariables.set('token', res.token);",
+                "    console.log('Admin token saved');",
+                "}"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/customers/login", "host": ["{{baseUrl}}"], "path": ["api","customers","login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"admin123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/customers/profile", "host": ["{{baseUrl}}"], "path": ["api","customers","profile"] }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/customers/profile", "host": ["{{baseUrl}}"], "path": ["api","customers","profile"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Smith\",\n  \"phone\": \"+919876543211\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Addresses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/customers/addresses", "host": ["{{baseUrl}}"], "path": ["api","customers","addresses"] }
+          }
+        },
+        {
+          "name": "Add Address",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/customers/addresses", "host": ["{{baseUrl}}"], "path": ["api","customers","addresses"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"street\": \"123 MG Road\",\n  \"city\": \"Bangalore\",\n  \"state\": \"Karnataka\",\n  \"zipCode\": \"560001\",\n  \"country\": \"India\",\n  \"isDefault\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Address",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/customers/addresses/1", "host": ["{{baseUrl}}"], "path": ["api","customers","addresses","1"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "02 — Categories (Product Service)",
+      "item": [
+        {
+          "name": "Get All Categories",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/categories", "host": ["{{baseUrl}}"], "path": ["api","categories"] }
+          }
+        },
+        {
+          "name": "Create Category (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/categories", "host": ["{{baseUrl}}"], "path": ["api","categories"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Electronics\",\n  \"description\": \"Smartphones, laptops, and gadgets\"\n}"
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "03 — Products (Product Service)",
+      "item": [
+        {
+          "name": "Get All Products (Paginated)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products?page=0&size=10&sortBy=createdAt&direction=DESC",
+              "host": ["{{baseUrl}}"], "path": ["api","products"],
+              "query": [
+                { "key": "page",      "value": "0" },
+                { "key": "size",      "value": "10" },
+                { "key": "sortBy",    "value": "createdAt" },
+                { "key": "direction", "value": "DESC" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search Products",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products?search=phone&page=0&size=10",
+              "host": ["{{baseUrl}}"], "path": ["api","products"],
+              "query": [
+                { "key": "search", "value": "phone" },
+                { "key": "page",   "value": "0" },
+                { "key": "size",   "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filter by Category",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products?categoryId=1&page=0&size=10",
+              "host": ["{{baseUrl}}"], "path": ["api","products"],
+              "query": [
+                { "key": "categoryId", "value": "1" },
+                { "key": "page",       "value": "0" },
+                { "key": "size",       "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/products/1", "host": ["{{baseUrl}}"], "path": ["api","products","1"] }
+          }
+        },
+        {
+          "name": "Create Product (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/products", "host": ["{{baseUrl}}"], "path": ["api","products"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Samsung Galaxy S24\",\n  \"description\": \"Flagship Android smartphone with AI features\",\n  \"price\": 79999.00,\n  \"stockQuantity\": 50,\n  \"categoryId\": 1,\n  \"imageUrl\": \"https://example.com/s24.jpg\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Product (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/products/1", "host": ["{{baseUrl}}"], "path": ["api","products","1"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Samsung Galaxy S24 Ultra\",\n  \"description\": \"Updated flagship with S-Pen\",\n  \"price\": 124999.00,\n  \"stockQuantity\": 30,\n  \"categoryId\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Product (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/products/1", "host": ["{{baseUrl}}"], "path": ["api","products","1"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "04 — Orders (Order Service)",
+      "item": [
+        {
+          "name": "Place Order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api","orders"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shippingAddress\": \"123 MG Road, Bangalore, Karnataka 560001\",\n  \"items\": [\n    {\n      \"productId\": 1,\n      \"productName\": \"Samsung Galaxy S24\",\n      \"quantity\": 1,\n      \"unitPrice\": 79999.00\n    },\n    {\n      \"productId\": 2,\n      \"productName\": \"USB-C Cable\",\n      \"quantity\": 2,\n      \"unitPrice\": 499.00\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Get My Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders?page=0&size=10",
+              "host": ["{{baseUrl}}"], "path": ["api","orders"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Order by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/orders/1", "host": ["{{baseUrl}}"], "path": ["api","orders","1"] }
+          }
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/orders/1/cancel", "host": ["{{baseUrl}}"], "path": ["api","orders","1","cancel"] }
+          }
+        },
+        {
+          "name": "Get All Orders (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/admin/all?page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api","orders","admin","all"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Order Status (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/admin/1/status?status=SHIPPED",
+              "host": ["{{baseUrl}}"], "path": ["api","orders","admin","1","status"],
+              "query": [{ "key": "status", "value": "SHIPPED" }]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "05 — Payments (Payment Service)",
+      "item": [
+        {
+          "name": "Get Payment by Order ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/payments/order/1", "host": ["{{baseUrl}}"], "path": ["api","payments","order","1"] }
+          }
+        },
+        {
+          "name": "Get My Payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/payments/my", "host": ["{{baseUrl}}"], "path": ["api","payments","my"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "06 — Admin Dashboard (Admin Service)",
+      "item": [
+        {
+          "name": "Get Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/admin/dashboard", "host": ["{{baseUrl}}"], "path": ["api","admin","dashboard"] }
+          }
+        },
+        {
+          "name": "Sales Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reports/sales?from=2026-01-01&to=2026-12-31",
+              "host": ["{{baseUrl}}"], "path": ["api","admin","reports","sales"],
+              "query": [
+                { "key": "from", "value": "2026-01-01" },
+                { "key": "to",   "value": "2026-12-31" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Export Orders to Excel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reports/export?from=2026-01-01&to=2026-12-31",
+              "host": ["{{baseUrl}}"], "path": ["api","admin","reports","export"],
+              "query": [
+                { "key": "from", "value": "2026-01-01" },
+                { "key": "to",   "value": "2026-12-31" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin Ping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/admin/ping", "host": ["{{baseUrl}}"], "path": ["api","admin","ping"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "07 — Health Checks",
+      "item": [
+        {
+          "name": "API Gateway Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "http://localhost:8080/actuator/health", "raw": "http://localhost:8080/actuator/health" }
+          }
+        },
+        {
+          "name": "Eureka Dashboard",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "http://localhost:8761", "raw": "http://localhost:8761" }
+          }
+        },
+        {
+          "name": "Config Server — customer-service config",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "config-admin" },
+                { "key": "password", "value": "config-secret" }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "http://localhost:8888/customer-service/default", "raw": "http://localhost:8888/customer-service/default" }
+          }
+        }
+      ]
+    }
+
+  ]
+}
