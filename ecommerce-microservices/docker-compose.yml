@@ -1,0 +1,372 @@
+# ============================================================================
+# Enterprise E-Commerce Microservices Platform — Docker Compose
+# ============================================================================
+# Usage:
+#   docker compose up -d --build       # First run (builds all images)
+#   docker compose up -d               # Subsequent runs
+#   docker compose logs -f <service>   # Stream logs
+#   docker compose down -v             # Stop and remove volumes
+# ============================================================================
+
+services:
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # DATA LAYER
+  # ────────────────────────────────────────────────────────────────────────────
+
+  mysql:
+    image: mysql:8.0
+    container_name: ecommerce-mysql
+    restart: unless-stopped
+    environment:
+      # The ecommerce user + all databases are created by init-databases.sql at startup.
+      # Do NOT set MYSQL_USER here — it conflicts with our init SQL user creation.
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password_change_me}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_password_change_me}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - ecommerce-network
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # MESSAGE BROKER
+  # ────────────────────────────────────────────────────────────────────────────
+
+  zookeeper:
+    image: bitnami/zookeeper:3.9
+    container_name: ecommerce-zookeeper
+    restart: unless-stopped
+    environment:
+      ALLOW_ANONYMOUS_LOGIN: "yes"
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper-data:/bitnami/zookeeper
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - ecommerce-network
+
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: ecommerce-kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+      KAFKA_CFG_LOG_RETENTION_HOURS: 168
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka-data:/bitnami/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - ecommerce-network
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # INFRASTRUCTURE — Boot order: config → discovery → gateway
+  # ────────────────────────────────────────────────────────────────────────────
+
+  config-server:
+    build:
+      context: .
+      dockerfile: infrastructure/config-server/Dockerfile
+    image: ecommerce/config-server:latest
+    container_name: ecommerce-config-server
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: native
+    ports:
+      - "8888:8888"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8888/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - ecommerce-network
+
+  discovery-server:
+    build:
+      context: .
+      dockerfile: infrastructure/discovery-server/Dockerfile
+    image: ecommerce/discovery-server:latest
+    container_name: ecommerce-discovery-server
+    restart: unless-stopped
+    depends_on:
+      config-server:
+        condition: service_healthy
+    environment:
+      # Override localhost → container name for config server
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://${CONFIG_SERVER_USER:-config-admin}:${CONFIG_SERVER_PASSWORD:-config-secret}@config-server:8888"
+      # Override Eureka self-registration URL
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://${EUREKA_USER:-eureka}:${EUREKA_PASSWORD:-eureka-secret}@discovery-server:8761/eureka/"
+      EUREKA_INSTANCE_HOSTNAME: discovery-server
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - ecommerce-network
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: infrastructure/api-gateway/Dockerfile
+    image: ecommerce/api-gateway:latest
+    container_name: ecommerce-api-gateway
+    restart: unless-stopped
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://${CONFIG_SERVER_USER:-config-admin}:${CONFIG_SERVER_PASSWORD:-config-secret}@config-server:8888"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://${EUREKA_USER:-eureka}:${EUREKA_PASSWORD:-eureka-secret}@discovery-server:8761/eureka/"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - ecommerce-network
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # BUSINESS MICROSERVICES
+  # ────────────────────────────────────────────────────────────────────────────
+
+  customer-service:
+    build:
+      context: .
+      dockerfile: microservices/customer-service/Dockerfile
+    image: ecommerce/customer-service:latest
+    container_name: ecommerce-customer-service
+    restart: unless-stopped
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://${CONFIG_SERVER_USER:-config-admin}:${CONFIG_SERVER_PASSWORD:-config-secret}@config-server:8888"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://${EUREKA_USER:-eureka}:${EUREKA_PASSWORD:-eureka-secret}@discovery-server:8761/eureka/"
+      # Override MySQL URL to use container hostname
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/ecommerce_customers?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-ecommerce}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-ecommerce123}
+    ports:
+      - "8081:8081"
+    networks:
+      - ecommerce-network
+
+  product-service:
+    build:
+      context: .
+      dockerfile: microservices/product-service/Dockerfile
+    image: ecommerce/product-service:latest
+    container_name: ecommerce-product-service
+    restart: unless-stopped
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://${CONFIG_SERVER_USER:-config-admin}:${CONFIG_SERVER_PASSWORD:-config-secret}@config-server:8888"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://${EUREKA_USER:-eureka}:${EUREKA_PASSWORD:-eureka-secret}@discovery-server:8761/eureka/"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/ecommerce_products?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-ecommerce}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-ecommerce123}
+    ports:
+      - "8082:8082"
+    networks:
+      - ecommerce-network
+
+  order-service:
+    build:
+      context: .
+      dockerfile: microservices/order-service/Dockerfile
+    image: ecommerce/order-service:latest
+    container_name: ecommerce-order-service
+    restart: unless-stopped
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://${CONFIG_SERVER_USER:-config-admin}:${CONFIG_SERVER_PASSWORD:-config-secret}@config-server:8888"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://${EUREKA_USER:-eureka}:${EUREKA_PASSWORD:-eureka-secret}@discovery-server:8761/eureka/"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/ecommerce_orders?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-ecommerce}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-ecommerce123}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8083:8083"
+    networks:
+      - ecommerce-network
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: microservices/payment-service/Dockerfile
+    image: ecommerce/payment-service:latest
+    container_name: ecommerce-payment-service
+    restart: unless-stopped
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://${CONFIG_SERVER_USER:-config-admin}:${CONFIG_SERVER_PASSWORD:-config-secret}@config-server:8888"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://${EUREKA_USER:-eureka}:${EUREKA_PASSWORD:-eureka-secret}@discovery-server:8761/eureka/"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/ecommerce_payments?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-ecommerce}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-ecommerce123}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8086:8086"
+    networks:
+      - ecommerce-network
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: microservices/notification-service/Dockerfile
+    image: ecommerce/notification-service:latest
+    container_name: ecommerce-notification-service
+    restart: unless-stopped
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://${CONFIG_SERVER_USER:-config-admin}:${CONFIG_SERVER_PASSWORD:-config-secret}@config-server:8888"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://${EUREKA_USER:-eureka}:${EUREKA_PASSWORD:-eureka-secret}@discovery-server:8761/eureka/"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/ecommerce_notifications?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-ecommerce}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-ecommerce123}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MAIL_USERNAME: ${MAIL_USERNAME:-stub@example.com}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-stub-password}
+      MAIL_STUB_MODE: ${MAIL_STUB_MODE:-true}
+    ports:
+      - "8084:8084"
+    networks:
+      - ecommerce-network
+
+  admin-service:
+    build:
+      context: .
+      dockerfile: microservices/admin-service/Dockerfile
+    image: ecommerce/admin-service:latest
+    container_name: ecommerce-admin-service
+    restart: unless-stopped
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://${CONFIG_SERVER_USER:-config-admin}:${CONFIG_SERVER_PASSWORD:-config-secret}@config-server:8888"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://${EUREKA_USER:-eureka}:${EUREKA_PASSWORD:-eureka-secret}@discovery-server:8761/eureka/"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/ecommerce_admin?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-ecommerce}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-ecommerce123}
+      # Override internal service URLs from localhost → container names
+      SERVICES_PRODUCT_SERVICE: http://product-service:8082
+      SERVICES_ORDER_SERVICE: http://order-service:8083
+      SERVICES_CUSTOMER_SERVICE: http://customer-service:8081
+      SERVICES_PAYMENT_SERVICE: http://payment-service:8086
+    ports:
+      - "8085:8085"
+    networks:
+      - ecommerce-network
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # FRONTEND
+  # ────────────────────────────────────────────────────────────────────────────
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ecommerce/frontend:latest
+    container_name: ecommerce-frontend
+    restart: unless-stopped
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    networks:
+      - ecommerce-network
+
+# ────────────────────────────────────────────────────────────────────────────
+# NETWORKS
+# ────────────────────────────────────────────────────────────────────────────
+networks:
+  ecommerce-network:
+    name: ecommerce-network
+    driver: bridge
+
+# ────────────────────────────────────────────────────────────────────────────
+# VOLUMES
+# ────────────────────────────────────────────────────────────────────────────
+volumes:
+  mysql-data:
+    name: ecommerce-mysql-data
+  zookeeper-data:
+    name: ecommerce-zookeeper-data
+  kafka-data:
+    name: ecommerce-kafka-data

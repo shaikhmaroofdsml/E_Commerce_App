@@ -32,7 +32,7 @@
 │      JWT Filter │ Circuit Breaker │ Load Balancer        │
 └──┬────────┬───────────┬────────────┬──────────────┬─────┘
    │        │           │            │              │
-:8081    :8082       :8083        :8086          :8085
+ :8081    :8082       :8083        :8086          :8085
 CUSTOMER PRODUCT    ORDER        PAYMENT        ADMIN
 
                         │ Kafka          │ Kafka

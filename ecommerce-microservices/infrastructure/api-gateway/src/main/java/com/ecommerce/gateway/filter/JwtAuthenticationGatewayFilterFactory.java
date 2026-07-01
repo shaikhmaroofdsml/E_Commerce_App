@@ -33,8 +33,8 @@ import java.util.Base64;
  */
 @Slf4j
 @Component
-public class JwtAuthenticationFilterFactory
-        extends AbstractGatewayFilterFactory<JwtAuthenticationFilterFactory.Config> {
+public class JwtAuthenticationGatewayFilterFactory
+        extends AbstractGatewayFilterFactory<JwtAuthenticationGatewayFilterFactory.Config> {
 
     // Default value prevents startup failure if config-server is temporarily unreachable
     @Value("${spring.security.jwt.public-key-path:classpath:keys/public.pem}")
@@ -42,7 +42,7 @@ public class JwtAuthenticationFilterFactory
 
     private PublicKey publicKey;
 
-    public JwtAuthenticationFilterFactory() {
+    public JwtAuthenticationGatewayFilterFactory() {
         super(Config.class);
     }
 
