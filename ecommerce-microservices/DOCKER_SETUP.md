@@ -646,7 +646,7 @@ SYMPTOM: Containers keep restarting, OOMKilled errors in logs
 FIX:     Docker Desktop Settings → Resources → Memory → increase to 8 GB+
          Then: Apply & Restart
 ```
-
+.
 ---
 
 > 🔒 **Security note for production:** Change `MYSQL_ROOT_PASSWORD` in `.env`, rotate the JWT RSA keys, and never commit `.env` to source control.
