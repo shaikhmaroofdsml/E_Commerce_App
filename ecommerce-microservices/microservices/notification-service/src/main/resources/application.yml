@@ -17,3 +17,14 @@ eureka:
 logging:
   level:
     com.ecommerce.notification: DEBUG
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  show-actuator: false

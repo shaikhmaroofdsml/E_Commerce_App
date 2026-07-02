@@ -57,6 +57,13 @@ spring:
           filters:
             - RewritePath=/admin-service(?<segment>/?.*), $\{segment}
 
+        - id: swagger-notification
+          uri: lb://notification-service
+          predicates:
+            - Path=/notification-service/v3/api-docs/**
+          filters:
+            - RewritePath=/notification-service(?<segment>/?.*), $\{segment}
+
         # ─── Customer Service ────────────────────────────────────────────────
         - id: customer-public
           uri: lb://customer-service
@@ -194,6 +201,8 @@ springdoc:
         url: /order-service/v3/api-docs
       - name: Payment Service
         url: /payment-service/v3/api-docs
+      - name: Notification Service
+        url: /notification-service/v3/api-docs
       - name: Admin Service
         url: /admin-service/v3/api-docs
   api-docs:
